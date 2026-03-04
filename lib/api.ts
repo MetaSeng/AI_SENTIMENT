@@ -1,0 +1,333 @@
+/**
+ * Service layer for SocialSight.
+ * Calls real Bright Data scraper API routes when not in demo mode.
+ * Falls back to mock data in demo mode.
+ */
+
+import {
+  mockComments,
+  mockProducts,
+  mockDashboardOverview,
+  mockRecommendations,
+} from "./mock-data";
+import {
+  transformComments,
+  buildProducts,
+  buildOverview,
+  buildRecommendations,
+  type BrightDataComment,
+} from "./transform";
+import type {
+  Comment,
+  Product,
+  DashboardOverview,
+  Recommendation,
+  Sentiment,
+} from "./types";
+
+// ─── In-memory store for the latest analysis results ────────────────
+let analysisResults: {
+  comments: Comment[];
+  products: Product[];
+  overview: DashboardOverview;
+  recommendations: Recommendation;
+} | null = null;
+
+export function getAnalysisResults() {
+  return analysisResults;
+}
+
+export function clearAnalysisResults() {
+  analysisResults = null;
+}
+
+// ─── Demo / mock data helpers ───────────────────────────────────────
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Ask the server whether the Bright Data API key is configured.
+ * Used by the UI to display connection status before running an analysis.
+ */
+export async function isBrightDataConfigured(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/config/brightdata");
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data.configured);
+  } catch {
+    return false;
+  }
+}
+
+// ─── Public API methods ─────────────────────────────────────────────
+
+/** Fetch the dashboard overview KPIs and chart data */
+export async function getDashboardOverview(
+  demo = true,
+): Promise<DashboardOverview> {
+  if (!demo && analysisResults) return analysisResults.overview;
+  await delay(400);
+  return mockDashboardOverview;
+}
+
+/** Fetch paginated comments, optionally filtered by sentiment */
+export async function getComments(
+  filter?: Sentiment | "all",
+  demo = true,
+): Promise<Comment[]> {
+  const source =
+    !demo && analysisResults ? analysisResults.comments : mockComments;
+  await delay(300);
+  if (!filter || filter === "all") return source;
+  return source.filter((c) => c.sentiment === filter);
+}
+
+/** Fetch all products */
+export async function getProducts(demo = true): Promise<Product[]> {
+  if (!demo && analysisResults) return analysisResults.products;
+  await delay(350);
+  return mockProducts;
+}
+
+/** Fetch a single product by ID */
+export async function getProductById(
+  id: string,
+  demo = true,
+): Promise<Product | undefined> {
+  const source =
+    !demo && analysisResults ? analysisResults.products : mockProducts;
+  await delay(200);
+  return source.find((p) => p.id === id);
+}
+
+/** Fetch recommendations and actionable insights */
+export async function getRecommendations(demo = true): Promise<Recommendation> {
+  if (!demo && analysisResults) return analysisResults.recommendations;
+  await delay(400);
+  return mockRecommendations;
+}
+
+// ─── Real Bright Data scraping flow ─────────────────────────────────
+
+interface ProgressCallback {
+  (stage: string, percent: number): void;
+}
+
+export interface AnalysisSource {
+  url: string;
+  productName: string;
+}
+
+type BrightDataErrorRow = BrightDataComment & {
+  error?: string;
+  error_code?: string | number;
+};
+
+async function triggerSnapshot(url: string): Promise<string> {
+  const triggerRes = await fetch("/api/scrape/trigger", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+
+  if (!triggerRes.ok) {
+    const err = await triggerRes.json().catch(() => ({}));
+    const message = err.error || "Failed to trigger scraping";
+    if (message.includes("BRIGHTDATA_API_KEY")) {
+      throw new Error(
+        "Bright Data API key not configured on the server. Please set BRIGHTDATA_API_KEY.",
+      );
+    }
+    throw new Error(message);
+  }
+
+  const { snapshot_id } = await triggerRes.json();
+  if (!snapshot_id) throw new Error("No snapshot_id received from scraper");
+  return snapshot_id;
+}
+
+async function waitUntilReady(
+  snapshotId: string,
+  onProgress: ProgressCallback,
+  stageLabel: string,
+  progressStart: number,
+  progressEnd: number,
+): Promise<void> {
+  let status = "running";
+  let pollCount = 0;
+  const maxPolls = 120; // max 10 minutes (5s intervals)
+
+  while (status !== "ready" && status !== "failed" && pollCount < maxPolls) {
+    await delay(5000);
+    pollCount++;
+
+    const progressPercent =
+      progressStart + ((progressEnd - progressStart) * pollCount) / maxPolls;
+    onProgress(stageLabel, Math.round(progressPercent));
+
+    try {
+      const progressRes = await fetch(`/api/scrape/progress/${snapshotId}`);
+      if (!progressRes.ok) continue;
+
+      const progressData = await progressRes.json();
+      status = progressData.status || "running";
+
+      if (status === "ready") break;
+      if (status === "failed") {
+        throw new Error(
+          "Scraping failed: " + (progressData.error || "Unknown error"),
+        );
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("Scraping failed")) {
+        throw e;
+      }
+    }
+  }
+
+  if (pollCount >= maxPolls) {
+    throw new Error("Scraping timed out after 10 minutes");
+  }
+}
+
+async function fetchSnapshotRows(snapshotId: string): Promise<BrightDataComment[]> {
+  const resultsRes = await fetch(`/api/scrape/results/${snapshotId}`);
+  if (!resultsRes.ok) {
+    throw new Error("Failed to download scraping results");
+  }
+  return resultsRes.json();
+}
+
+/**
+ * Start a real analysis using Bright Data scraper.
+ * Supports multiple post sources mapped to user-defined products.
+ */
+export async function startRealAnalysis(
+  sources: AnalysisSource[],
+  onProgress: ProgressCallback,
+): Promise<{ success: boolean; commentCount: number; productCount: number }> {
+  const cleanedSources = sources
+    .map((s) => ({ url: s.url.trim(), productName: s.productName.trim() }))
+    .filter((s) => s.url.length > 0 && s.productName.length > 0);
+
+  if (cleanedSources.length === 0) {
+    throw new Error("Please add at least one post link mapped to a product.");
+  }
+
+  const allComments: Comment[] = [];
+  const sourceWeight = 70 / cleanedSources.length;
+
+  for (let i = 0; i < cleanedSources.length; i++) {
+    const source = cleanedSources[i];
+    const start = 5 + i * sourceWeight;
+    const triggerEnd = start + sourceWeight * 0.15;
+    const pollEnd = start + sourceWeight * 0.8;
+    const done = start + sourceWeight;
+
+    const sourceLabel = `${source.productName} (${i + 1}/${cleanedSources.length})`;
+    onProgress(`Triggering Facebook scraper for ${sourceLabel}...`, Math.round(start));
+    const snapshotId = await triggerSnapshot(source.url);
+
+    onProgress(`Scraping comments for ${sourceLabel}...`, Math.round(triggerEnd));
+    await waitUntilReady(
+      snapshotId,
+      onProgress,
+      `Scraping comments for ${sourceLabel}...`,
+      triggerEnd,
+      pollEnd,
+    );
+
+    onProgress(`Downloading results for ${sourceLabel}...`, Math.round(pollEnd));
+    const rawData = await fetchSnapshotRows(snapshotId);
+    if (!Array.isArray(rawData) || rawData.length === 0) {
+      throw new Error(
+        `No comments found for product "${source.productName}". The linked post may have no public comments.`,
+      );
+    }
+
+    const rows = rawData as BrightDataErrorRow[];
+    const errorRows = rows.filter(
+      (r) =>
+        (typeof r.error === "string" && r.error.trim().length > 0) ||
+        r.error_code !== undefined,
+    );
+    const usableRows = rows.filter((r) => !errorRows.includes(r));
+
+    if (usableRows.length === 0 && errorRows.length > 0) {
+      const firstError = errorRows[0];
+      const detail = firstError.error || "Scraper returned an error row";
+      const code =
+        firstError.error_code !== undefined
+          ? ` (code: ${String(firstError.error_code)})`
+          : "";
+      throw new Error(
+        `Bright Data could not scrape "${source.url}" for product "${source.productName}": ${detail}${code}.`,
+      );
+    }
+
+    const comments = transformComments(usableRows as BrightDataComment[], {
+      forcedProductName: source.productName,
+    });
+    if (comments.length === 0 && usableRows.length > 0) {
+      const first = usableRows[0] as Record<string, unknown>;
+      const keys = Object.keys(first).slice(0, 25).join(", ");
+      throw new Error(
+        `Scrape returned ${usableRows.length} rows for "${source.productName}", but no comment text could be mapped. First row keys: ${keys}`,
+      );
+    }
+
+    allComments.push(...comments);
+    onProgress(`Collected comments for ${sourceLabel}.`, Math.round(done));
+  }
+
+  onProgress("Analyzing sentiment...", 85);
+  await delay(500);
+
+  const products = buildProducts(allComments);
+  const overview = buildOverview(allComments, products);
+  const recommendations = buildRecommendations(products, allComments);
+
+  onProgress("Generating insights...", 95);
+  await delay(500);
+
+  // Store results in memory
+  analysisResults = {
+    comments: allComments,
+    products,
+    overview,
+    recommendations,
+  };
+
+  onProgress("Complete!", 100);
+
+  return {
+    success: true,
+    commentCount: allComments.length,
+    productCount: products.length,
+  };
+}
+
+/** Simulate the scraping + analysis process for demo mode */
+export async function startDemoAnalysis(
+  onProgress: ProgressCallback,
+): Promise<{ success: boolean; commentCount: number; productCount: number }> {
+  const stages = [
+    { label: "Scraping posts...", duration: 1500 },
+    { label: "Analyzing comments...", duration: 2000 },
+    { label: "Generating insights...", duration: 1200 },
+  ];
+
+  for (const stage of stages) {
+    const steps = 20;
+    for (let i = 0; i <= steps; i++) {
+      onProgress(stage.label, Math.round((i / steps) * 100));
+      await delay(stage.duration / steps);
+    }
+  }
+
+  return {
+    success: true,
+    commentCount: mockComments.length,
+    productCount: mockProducts.length,
+  };
+}

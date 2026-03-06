@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { useApp } from "@/components/app-provider"
 
 export function DashboardHeader({
@@ -23,7 +24,20 @@ export function DashboardHeader({
 }: {
   onToggleSidebar: () => void
 }) {
-  const { logout } = useApp()
+  const {
+    logout,
+    user,
+    dateRangePreset,
+    customDateFrom,
+    customDateTo,
+    setDateRangePreset,
+    setCustomDateRange,
+  } = useApp()
+  const initials = (user?.fullName || user?.email || "SS")
+    .split(/\s+/)
+    .map((part) => part[0]?.toUpperCase())
+    .join("")
+    .slice(0, 2)
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-sm">
@@ -45,7 +59,7 @@ export function DashboardHeader({
 
       <div className="flex items-center gap-3">
         {/* Date range selector */}
-        <Select defaultValue="30d">
+        <Select value={dateRangePreset} onValueChange={(v) => setDateRangePreset(v as typeof dateRangePreset)}>
           <SelectTrigger className="hidden w-44 sm:flex">
             <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
             <SelectValue />
@@ -57,6 +71,22 @@ export function DashboardHeader({
             <SelectItem value="custom">Custom Range</SelectItem>
           </SelectContent>
         </Select>
+        {dateRangePreset === "custom" && (
+          <div className="hidden items-center gap-2 sm:flex">
+            <Input
+              type="date"
+              value={customDateFrom ?? ""}
+              onChange={(e) => setCustomDateRange(e.target.value || null, customDateTo)}
+              className="h-9 w-36"
+            />
+            <Input
+              type="date"
+              value={customDateTo ?? ""}
+              onChange={(e) => setCustomDateRange(customDateFrom, e.target.value || null)}
+              className="h-9 w-36"
+            />
+          </div>
+        )}
 
         {/* User avatar */}
         <DropdownMenu>
@@ -64,15 +94,15 @@ export function DashboardHeader({
             <Button variant="ghost" className="relative h-9 w-9 rounded-full">
               <Avatar className="h-9 w-9">
                 <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                  SS
+                  {initials || "SS"}
                 </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem className="flex flex-col items-start gap-0.5">
-              <span className="text-sm font-medium">Demo User</span>
-              <span className="text-xs text-muted-foreground">demo@socialsight.io</span>
+              <span className="text-sm font-medium">{user?.fullName || "User"}</span>
+              <span className="text-xs text-muted-foreground">{user?.email || "-"}</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={logout}>
               <LogOut className="mr-2 h-4 w-4" />

@@ -204,7 +204,7 @@ function ProductDetailModal({
 }
 
 export function ProductPerformance() {
-  const { demoMode } = useApp()
+  const { demoMode, dateRangePreset, customDateFrom, customDateTo } = useApp()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -215,12 +215,16 @@ export function ProductPerformance() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const data = await getProducts(demoMode)
+      const data = await getProducts(demoMode, {
+        preset: dateRangePreset,
+        from: customDateFrom,
+        to: customDateTo,
+      })
       setProducts(data)
       setLoading(false)
     }
     load()
-  }, [demoMode])
+  }, [demoMode, dateRangePreset, customDateFrom, customDateTo])
 
   const filteredProducts = products.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase())

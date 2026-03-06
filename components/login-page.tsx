@@ -10,15 +10,42 @@ import { Separator } from "@/components/ui/separator"
 import { useApp } from "@/components/app-provider"
 
 export function LoginPage() {
-  const { setView } = useApp()
+  const { setView, setUser } = useApp()
   const [isLogin, setIsLogin] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
+  const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setView("dashboard")
+    setError("")
+    setSubmitting(true)
+    try {
+      const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register"
+      const payload = isLogin
+        ? { email, password }
+        : { email, password, fullName }
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error || "Authentication failed")
+        return
+      }
+      setUser(data.user ?? null)
+      setView("dashboard")
+    } catch {
+      setError("Authentication failed")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -58,7 +85,12 @@ export function LoginPage() {
               {!isLogin && (
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="name">Full Name</Label>
-                  <Input id="name" placeholder="Enter your name" />
+                  <Input
+                    id="name"
+                    placeholder="Enter your name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                  />
                 </div>
               )}
               <div className="flex flex-col gap-2">
@@ -92,7 +124,13 @@ export function LoginPage() {
                 </div>
               </div>
 
-              <Button type="submit" className="mt-2 w-full">
+              {error && (
+                <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+
+              <Button type="submit" className="mt-2 w-full" disabled={submitting}>
                 {isLogin ? "Sign In" : "Create Account"}
               </Button>
 
@@ -106,7 +144,7 @@ export function LoginPage() {
                 type="button"
                 variant="outline"
                 className="w-full"
-                onClick={() => setView("dashboard")}
+                disabled
               >
                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
                   <path
@@ -126,7 +164,7 @@ export function LoginPage() {
                     fill="#EA4335"
                   />
                 </svg>
-                Continue with Google
+                Google Sign-In (coming soon)
               </Button>
             </form>
 

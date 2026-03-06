@@ -76,4 +76,37 @@ export interface Recommendation {
 }
 
 export type AppView = "login" | "dashboard"
-export type DashboardTab = "home" | "sentiment" | "products" | "recommendations" | "settings"
+
+export type DateRangePreset = "7d" | "30d" | "90d" | "custom"
+
+export interface DateFilterOptions {
+  preset: DateRangePreset
+  from?: string | null
+  to?: string | null
+}
+
+export type DashboardTab =
+  | "home"
+  | "sentiment"
+  | "products"
+  | "recommendations"
+  | "history"
+  | "settings"
+
+export interface AnalysisHistoryItem {
+  runId: string
+  mode: "DEMO" | "LIVE"
+  status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELED"
+  createdAt: string
+  finishedAt: string | null
+  totalComments: number
+  productCount: number
+  avgSentimentScore: number
+  sourceCount: number
+  topProducts: {
+    name: string
+    mentionCount: number
+    positivePercent: number
+    negativePercent: number
+  }[]
+}

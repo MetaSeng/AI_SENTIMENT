@@ -96,19 +96,23 @@ function TrendingTag({
 }
 
 export function Recommendations() {
-  const { demoMode } = useApp();
+  const { demoMode, dateRangePreset, customDateFrom, customDateTo } = useApp();
   const [data, setData] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const recs = await getRecommendations(demoMode);
+      const recs = await getRecommendations(demoMode, {
+        preset: dateRangePreset,
+        from: customDateFrom,
+        to: customDateTo,
+      });
       setData(recs);
       setLoading(false);
     }
     load();
-  }, [demoMode]);
+  }, [demoMode, dateRangePreset, customDateFrom, customDateTo]);
 
   if (loading || !data) {
     return (

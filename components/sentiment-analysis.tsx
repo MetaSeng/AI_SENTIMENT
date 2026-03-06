@@ -101,7 +101,7 @@ function SentimentBadge({ sentiment }: { sentiment: Sentiment }) {
 }
 
 export function SentimentAnalysis() {
-  const { demoMode } = useApp()
+  const { demoMode, dateRangePreset, customDateFrom, customDateTo } = useApp()
   const [overview, setOverview] = useState<DashboardOverview | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [filter, setFilter] = useState<Sentiment | "all">("all")
@@ -111,15 +111,23 @@ export function SentimentAnalysis() {
     async function load() {
       setLoading(true)
       const [ov, cm] = await Promise.all([
-        getDashboardOverview(demoMode),
-        getComments(filter, demoMode),
+        getDashboardOverview(demoMode, {
+          preset: dateRangePreset,
+          from: customDateFrom,
+          to: customDateTo,
+        }),
+        getComments(filter, demoMode, {
+          preset: dateRangePreset,
+          from: customDateFrom,
+          to: customDateTo,
+        }),
       ])
       setOverview(ov)
       setComments(cm)
       setLoading(false)
     }
     load()
-  }, [filter, demoMode])
+  }, [filter, demoMode, dateRangePreset, customDateFrom, customDateTo])
 
   if (loading || !overview) {
     return (

@@ -9,6 +9,7 @@ import { DashboardHome } from "@/components/dashboard-home"
 import { SentimentAnalysis } from "@/components/sentiment-analysis"
 import { ProductPerformance } from "@/components/product-performance"
 import { Recommendations } from "@/components/recommendations"
+import { HistoryPage } from "@/components/history-page"
 import { SettingsPage } from "@/components/settings-page"
 
 export function DashboardLayout() {
@@ -40,6 +41,8 @@ export function DashboardLayout() {
         return <ProductPerformance />
       case "recommendations":
         return <Recommendations />
+      case "history":
+        return <HistoryPage />
       case "settings":
         return <SettingsPage />
       default:

@@ -5,7 +5,11 @@ import { LoginPage } from "@/components/login-page"
 import { DashboardLayout } from "@/components/dashboard-layout"
 
 function AppContent() {
-  const { view } = useApp()
+  const { view, isAuthLoading } = useApp()
+
+  if (isAuthLoading) {
+    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading...</div>
+  }
 
   if (view === "login") {
     return <LoginPage />

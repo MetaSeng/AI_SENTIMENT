@@ -23,6 +23,8 @@ import type {
   DashboardOverview,
   Recommendation,
   Sentiment,
+  AnalysisHistoryItem,
+  DateFilterOptions,
 } from "./types";
 
 // ─── In-memory store for the latest analysis results ────────────────
@@ -32,6 +34,8 @@ let analysisResults: {
   overview: DashboardOverview;
   recommendations: Recommendation;
 } | null = null;
+let activeRunId: string | null = null;
+let analysisCacheKey: string | null = null;
 
 export function getAnalysisResults() {
   return analysisResults;
@@ -39,6 +43,8 @@ export function getAnalysisResults() {
 
 export function clearAnalysisResults() {
   analysisResults = null;
+  activeRunId = null;
+  analysisCacheKey = null;
 }
 
 // ─── Demo / mock data helpers ───────────────────────────────────────
@@ -64,7 +70,9 @@ export async function isBrightDataConfigured(): Promise<boolean> {
 /** Fetch the dashboard overview KPIs and chart data */
 export async function getDashboardOverview(
   demo = true,
+  filter?: DateFilterOptions,
 ): Promise<DashboardOverview> {
+  if (!demo) await ensureAnalysisLoaded(filter);
   if (!demo && analysisResults) return analysisResults.overview;
   await delay(400);
   return mockDashboardOverview;
@@ -74,7 +82,9 @@ export async function getDashboardOverview(
 export async function getComments(
   filter?: Sentiment | "all",
   demo = true,
+  dateFilter?: DateFilterOptions,
 ): Promise<Comment[]> {
+  if (!demo) await ensureAnalysisLoaded(dateFilter);
   const source =
     !demo && analysisResults ? analysisResults.comments : mockComments;
   await delay(300);
@@ -83,7 +93,11 @@ export async function getComments(
 }
 
 /** Fetch all products */
-export async function getProducts(demo = true): Promise<Product[]> {
+export async function getProducts(
+  demo = true,
+  filter?: DateFilterOptions,
+): Promise<Product[]> {
+  if (!demo) await ensureAnalysisLoaded(filter);
   if (!demo && analysisResults) return analysisResults.products;
   await delay(350);
   return mockProducts;
@@ -93,7 +107,9 @@ export async function getProducts(demo = true): Promise<Product[]> {
 export async function getProductById(
   id: string,
   demo = true,
+  filter?: DateFilterOptions,
 ): Promise<Product | undefined> {
+  if (!demo) await ensureAnalysisLoaded(filter);
   const source =
     !demo && analysisResults ? analysisResults.products : mockProducts;
   await delay(200);
@@ -101,7 +117,11 @@ export async function getProductById(
 }
 
 /** Fetch recommendations and actionable insights */
-export async function getRecommendations(demo = true): Promise<Recommendation> {
+export async function getRecommendations(
+  demo = true,
+  filter?: DateFilterOptions,
+): Promise<Recommendation> {
+  if (!demo) await ensureAnalysisLoaded(filter);
   if (!demo && analysisResults) return analysisResults.recommendations;
   await delay(400);
   return mockRecommendations;
@@ -116,6 +136,115 @@ interface ProgressCallback {
 export interface AnalysisSource {
   url: string;
   productName: string;
+}
+
+function buildFilterQuery(filter?: DateFilterOptions): string {
+  if (!filter) return "";
+  const qs = new URLSearchParams();
+  qs.set("range", filter.preset);
+  if (filter.from) qs.set("from", filter.from);
+  if (filter.to) qs.set("to", filter.to);
+  return `?${qs.toString()}`;
+}
+
+function makeCacheKey(runId: string | null, filter?: DateFilterOptions): string {
+  return JSON.stringify({
+    runId: runId ?? "latest",
+    preset: filter?.preset ?? "30d",
+    from: filter?.from ?? null,
+    to: filter?.to ?? null,
+  });
+}
+
+async function fetchLatestPersistedAnalysis(filter?: DateFilterOptions): Promise<{
+  comments: Comment[];
+  products: Product[];
+  overview: DashboardOverview;
+  recommendations: Recommendation;
+} | null> {
+  try {
+    const res = await fetch(`/api/analysis/latest${buildFilterQuery(filter)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.comments || !data?.products || !data?.overview || !data?.recommendations) {
+      return null;
+    }
+    return {
+      comments: data.comments as Comment[],
+      products: data.products as Product[],
+      overview: data.overview as DashboardOverview,
+      recommendations: data.recommendations as Recommendation,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchPersistedAnalysisByRunId(
+  runId: string,
+  filter?: DateFilterOptions,
+): Promise<{
+  comments: Comment[];
+  products: Product[];
+  overview: DashboardOverview;
+  recommendations: Recommendation;
+} | null> {
+  try {
+    const res = await fetch(`/api/analysis/${runId}${buildFilterQuery(filter)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.comments || !data?.products || !data?.overview || !data?.recommendations) {
+      return null;
+    }
+    return {
+      comments: data.comments as Comment[],
+      products: data.products as Product[],
+      overview: data.overview as DashboardOverview,
+      recommendations: data.recommendations as Recommendation,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function getAnalysisHistory(): Promise<AnalysisHistoryItem[]> {
+  try {
+    const res = await fetch("/api/analysis/history", { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.runs) ? (data.runs as AnalysisHistoryItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function ensureAnalysisLoaded(filter?: DateFilterOptions): Promise<void> {
+  const nextKey = makeCacheKey(activeRunId, filter);
+  if (analysisResults && analysisCacheKey === nextKey) return;
+
+  const persisted = activeRunId
+    ? await fetchPersistedAnalysisByRunId(activeRunId, filter)
+    : await fetchLatestPersistedAnalysis(filter);
+  if (!persisted) return;
+
+  analysisResults = persisted;
+  analysisCacheKey = nextKey;
+}
+
+export async function loadAnalysisRun(
+  runId: string,
+  filter?: DateFilterOptions,
+): Promise<boolean> {
+  const persisted = await fetchPersistedAnalysisByRunId(runId, filter);
+  if (!persisted) return false;
+  activeRunId = runId;
+  analysisResults = persisted;
+  analysisCacheKey = makeCacheKey(activeRunId, filter);
+  return true;
 }
 
 type BrightDataErrorRow = BrightDataComment & {
@@ -297,6 +426,25 @@ export async function startRealAnalysis(
     overview,
     recommendations,
   };
+  activeRunId = null;
+  analysisCacheKey = null;
+
+  try {
+    await fetch("/api/analysis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "LIVE",
+        sources: cleanedSources,
+        comments: allComments,
+        products,
+        overview,
+        recommendations,
+      }),
+    });
+  } catch (e) {
+    console.error("Failed to persist analysis to DB:", e);
+  }
 
   onProgress("Complete!", 100);
 
@@ -323,6 +471,32 @@ export async function startDemoAnalysis(
       onProgress(stage.label, Math.round((i / steps) * 100));
       await delay(stage.duration / steps);
     }
+  }
+
+  analysisResults = {
+    comments: mockComments,
+    products: mockProducts,
+    overview: mockDashboardOverview,
+    recommendations: mockRecommendations,
+  };
+  activeRunId = null;
+  analysisCacheKey = null;
+
+  try {
+    await fetch("/api/analysis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "DEMO",
+        sources: [],
+        comments: mockComments,
+        products: mockProducts,
+        overview: mockDashboardOverview,
+        recommendations: mockRecommendations,
+      }),
+    });
+  } catch (e) {
+    console.error("Failed to persist demo analysis to DB:", e);
   }
 
   return {

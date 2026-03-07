@@ -22,6 +22,10 @@ export function buildAnalysisResponse(
   const comments: Comment[] = run.cleanedComments
     .map((c) => {
       const commentDate = c.normalizedDate ?? c.createdAt
+      const meta =
+        c.cleaningMeta && typeof c.cleaningMeta === "object"
+          ? (c.cleaningMeta as { languageTag?: unknown; clusterId?: unknown })
+          : {}
       return {
         id: c.id,
         text: c.cleanedText,
@@ -31,6 +35,12 @@ export function buildAnalysisResponse(
         date: formatDate(commentDate),
         author: c.normalizedAuthor ?? "Unknown",
         likes: c.normalizedLikes,
+        languageTag:
+          typeof meta.languageTag === "string" ? meta.languageTag : undefined,
+        clusterId:
+          typeof meta.clusterId === "number" && Number.isFinite(meta.clusterId)
+            ? Math.floor(meta.clusterId)
+            : undefined,
       }
     })
     .filter((c) => {
@@ -53,4 +63,3 @@ export function buildAnalysisResponse(
     recommendations,
   }
 }
-

@@ -138,6 +138,35 @@ export interface AnalysisSource {
   productName: string;
 }
 
+interface SentimentApiResult {
+  label?: unknown;
+  sentiment?: unknown;
+  prediction?: unknown;
+  class?: unknown;
+  polarity?: unknown;
+  confidence?: unknown;
+  scores?: Record<string, unknown>;
+  language_tag?: unknown;
+  languageTag?: unknown;
+}
+
+interface SentimentApiResponse {
+  results?: unknown;
+  predictions?: unknown;
+  data?: {
+    results?: unknown;
+    predictions?: unknown;
+  };
+}
+
+interface ClusteringApiResult {
+  cluster_id?: number;
+}
+
+interface ClusteringApiResponse {
+  results?: ClusteringApiResult[];
+}
+
 function buildFilterQuery(filter?: DateFilterOptions): string {
   if (!filter) return "";
   const qs = new URLSearchParams();
@@ -327,6 +356,200 @@ async function fetchSnapshotRows(snapshotId: string): Promise<BrightDataComment[
   return resultsRes.json();
 }
 
+const SENTIMENT_REQUEST_BATCH_SIZE = 12;
+
+function parseFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function toAppSentiment(value: unknown): Sentiment | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value === 0) return "negative";
+    if (value === 1) return "neutral";
+    if (value === 2) return "positive";
+    return null;
+  }
+
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "positive" || normalized === "pos") return "positive";
+  if (normalized === "negative" || normalized === "neg") return "negative";
+  if (normalized === "neutral" || normalized === "neu") return "neutral";
+
+  if (normalized.includes("positive")) return "positive";
+  if (normalized.includes("negative")) return "negative";
+  if (normalized.includes("neutral")) return "neutral";
+
+  if (/label[_\s-]*0|class[_\s-]*0/.test(normalized)) return "negative";
+  if (/label[_\s-]*1|class[_\s-]*1/.test(normalized)) return "neutral";
+  if (/label[_\s-]*2|class[_\s-]*2/.test(normalized)) return "positive";
+  return null;
+}
+
+function sentimentFromScores(scores: Record<string, unknown> | undefined): Sentiment | null {
+  if (!scores) return null;
+  const normalized = new Map<string, number>();
+  for (const [key, raw] of Object.entries(scores)) {
+    const value = parseFiniteNumber(raw);
+    if (value === null) continue;
+    normalized.set(key.toLowerCase(), value);
+  }
+
+  const positive = normalized.get("positive");
+  const negative = normalized.get("negative");
+  const neutral = normalized.get("neutral");
+  if (
+    positive === undefined &&
+    negative === undefined &&
+    neutral === undefined
+  ) {
+    return null;
+  }
+
+  const ranked: Array<[Sentiment, number]> = [
+    ["positive", positive ?? Number.NEGATIVE_INFINITY],
+    ["neutral", neutral ?? Number.NEGATIVE_INFINITY],
+    ["negative", negative ?? Number.NEGATIVE_INFINITY],
+  ];
+  ranked.sort((a, b) => b[1] - a[1]);
+  const winner = ranked[0];
+
+  return winner && Number.isFinite(winner[1]) ? winner[0] : null;
+}
+
+function extractSentimentResults(payload: SentimentApiResponse): SentimentApiResult[] {
+  const candidates = [
+    payload.results,
+    payload.predictions,
+    payload.data?.results,
+    payload.data?.predictions,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate as SentimentApiResult[];
+    }
+  }
+  return [];
+}
+
+async function fetchAiSentimentBatch(texts: string[]): Promise<SentimentApiResult[]> {
+  const res = await fetch("/api/sentiment/predict/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      texts,
+      batch_size: Math.min(16, Math.max(1, texts.length)),
+    }),
+  });
+
+  const rawBody = await res.text();
+  let parsed: SentimentApiResponse | null = null;
+  try {
+    parsed = rawBody ? (JSON.parse(rawBody) as SentimentApiResponse) : null;
+  } catch {
+    parsed = null;
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `Sentiment API returned ${res.status}${rawBody ? `: ${rawBody.slice(0, 300)}` : ""}`,
+    );
+  }
+
+  const results = parsed ? extractSentimentResults(parsed) : [];
+  if (results.length === 0) {
+    throw new Error("Sentiment API returned no result array");
+  }
+
+  return results;
+}
+
+async function applyAiSentiment(comments: Comment[]): Promise<Comment[]> {
+  if (comments.length === 0) return comments;
+
+  const mapped = [...comments];
+
+  for (let start = 0; start < comments.length; start += SENTIMENT_REQUEST_BATCH_SIZE) {
+    const chunk = comments.slice(start, start + SENTIMENT_REQUEST_BATCH_SIZE);
+    const texts = chunk.map((c) => c.text);
+    const results = await fetchAiSentimentBatch(texts);
+
+    for (let offset = 0; offset < chunk.length; offset++) {
+      const result = results[offset];
+      if (!result) continue;
+
+      const sentiment =
+        toAppSentiment(result.label) ??
+        toAppSentiment(result.sentiment) ??
+        toAppSentiment(result.prediction) ??
+        toAppSentiment(result.class) ??
+        toAppSentiment(result.polarity) ??
+        sentimentFromScores(result.scores);
+
+      if (!sentiment) continue;
+
+      const positiveScore =
+        parseFiniteNumber(result.scores?.positive) ??
+        parseFiniteNumber(result.scores?.Positive) ??
+        parseFiniteNumber(result.scores?.POSITIVE);
+
+      const languageTag =
+        typeof result.language_tag === "string"
+          ? result.language_tag
+          : typeof result.languageTag === "string"
+            ? result.languageTag
+            : undefined;
+
+      const next = mapped[start + offset];
+      const nextScore =
+        positiveScore !== null
+          ? Math.max(0, Math.min(1, positiveScore))
+          : next.sentimentScore;
+
+      mapped[start + offset] = {
+        ...next,
+        sentiment,
+        sentimentScore: Math.round(nextScore * 100) / 100,
+        languageTag,
+      };
+    }
+  }
+
+  return mapped;
+}
+
+async function applyAiClustering(comments: Comment[]): Promise<Comment[]> {
+  if (comments.length === 0) return comments;
+
+  const texts = comments.map((c) => c.text);
+  const res = await fetch("/api/clustering/predict/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texts }),
+  });
+  if (!res.ok) {
+    throw new Error(`Clustering API returned ${res.status}`);
+  }
+
+  const data = (await res.json()) as ClusteringApiResponse;
+  if (!Array.isArray(data.results) || data.results.length !== comments.length) {
+    throw new Error("Clustering API returned an invalid results payload");
+  }
+
+  return comments.map((comment, index) => {
+    const clusterId = data.results?.[index]?.cluster_id;
+    return {
+      ...comment,
+      clusterId:
+        typeof clusterId === "number" && Number.isFinite(clusterId)
+          ? Math.floor(clusterId)
+          : undefined,
+    };
+  });
+}
+
 /**
  * Start a real analysis using Bright Data scraper.
  * Supports multiple post sources mapped to user-defined products.
@@ -394,10 +617,13 @@ export async function startRealAnalysis(
       );
     }
 
-    const comments = transformComments(usableRows as BrightDataComment[], {
+    const commentsWithFallbackSentiment = transformComments(
+      usableRows as BrightDataComment[],
+      {
       forcedProductName: source.productName,
-    });
-    if (comments.length === 0 && usableRows.length > 0) {
+      },
+    );
+    if (commentsWithFallbackSentiment.length === 0 && usableRows.length > 0) {
       const first = usableRows[0] as Record<string, unknown>;
       const keys = Object.keys(first).slice(0, 25).join(", ");
       throw new Error(
@@ -405,7 +631,19 @@ export async function startRealAnalysis(
       );
     }
 
-    allComments.push(...comments);
+    try {
+      const commentsWithAiSentiment = await applyAiSentiment(commentsWithFallbackSentiment);
+      try {
+        const commentsWithAiClustering = await applyAiClustering(commentsWithAiSentiment);
+        allComments.push(...commentsWithAiClustering);
+      } catch (error) {
+        console.warn("Clustering API unavailable, continuing without clusters.", error);
+        allComments.push(...commentsWithAiSentiment);
+      }
+    } catch (error) {
+      console.warn("Sentiment API unavailable, using fallback rule-based sentiment.", error);
+      allComments.push(...commentsWithFallbackSentiment);
+    }
     onProgress(`Collected comments for ${sourceLabel}.`, Math.round(done));
   }
 
@@ -414,7 +652,29 @@ export async function startRealAnalysis(
 
   const products = buildProducts(allComments);
   const overview = buildOverview(allComments, products);
-  const recommendations = buildRecommendations(products, allComments);
+  let recommendations = buildRecommendations(products, allComments);
+
+  try {
+    const aiRes = await fetch("/api/ai/recommendations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        comments: allComments,
+        products,
+      }),
+    });
+    if (aiRes.ok) {
+      const aiData = (await aiRes.json()) as { recommendations?: Recommendation };
+      if (aiData.recommendations) {
+        recommendations = aiData.recommendations;
+      }
+    } else {
+      const detail = await aiRes.text().catch(() => "");
+      console.warn("Gemini recommendations unavailable, using local recommendations.", detail);
+    }
+  } catch (error) {
+    console.warn("Gemini recommendations failed, using local recommendations.", error);
+  }
 
   onProgress("Generating insights...", 95);
   await delay(500);

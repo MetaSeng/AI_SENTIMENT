@@ -1,214 +1,128 @@
 # SocialSight AI Sentiment Dashboard
 
-SocialSight is a Next.js dashboard for scraping Facebook comments, running sentiment analysis, and showing product-level insights, recommendations, and history.
-
-It now includes:
-- User authentication (register/login/logout/session)
-- PostgreSQL + Prisma persistence
-- Analysis history by account
-- Date range filtering (7d / 30d / 90d / custom)
-- Demo mode + live Bright Data scraping flow
+SocialSight is a full-stack dashboard for scraping Facebook comments, running sentiment analysis + clustering, and showing product insights, recommendations, and history.
 
 ## Tech Stack
 
 - Next.js (App Router) + React + TypeScript
 - Prisma ORM + PostgreSQL
-- ShadCN UI components
-- Bright Data dataset API for Facebook comment scraping
+- FastAPI (Python) for ML inference endpoints
+- Bright Data dataset API for Facebook scraping
+- Gemini API for recommendation enhancement (optional fallback)
 
-## Features
+## Core Features
 
-- Authenticate users and scope all data by account
-- Run analysis in:
-  - Demo mode (mock dataset)
-  - Live mode (Bright Data scrape -> transform -> persist)
-- Dashboard tabs:
-  - Home
-  - Sentiment Analysis
-  - Product Performance
-  - Recommendations
-  - History
-  - Settings
-- View and open previous analysis runs
-- Filter all analytics with global date range
+- User authentication (register/login/logout/session)
+- User-scoped analysis history in PostgreSQL
+- Date range filtering (`7d`, `30d`, `90d`, `custom`)
+- Demo mode + live Bright Data scraping flow
+- AI sentiment via `/api/sentiment/predict/batch` with fallback to rule-based sentiment
+- AI clustering via `/api/clustering/predict/batch` (cluster id stored per comment)
+- Optional Gemini recommendations via `/api/ai/recommendations` with local fallback
 
 ## Project Structure
 
 ```txt
 app/
   api/
-    auth/                  # register/login/logout/me
-    analysis/              # save analysis + latest + run details + history
-    scrape/                # Bright Data trigger/progress/results
-components/
-  ...                      # dashboard UI pages/components
+    ai/recommendations/        # Gemini-backed recommendation proxy
+    analysis/                  # save + latest + run details + history
+    auth/                      # register/login/logout/me
+    clustering/predict/batch/  # Next.js route -> FastAPI clustering
+    scrape/                    # Bright Data trigger/progress/results
+    sentiment/predict/batch/   # Next.js route -> FastAPI sentiment
+api/
+  app.py                       # FastAPI entrypoint
+  routes/                      # sentiment + clustering routes
+  services/                    # model loading / inference
 lib/
-  api.ts                   # frontend service layer
-  prisma.ts                # Prisma client init (Prisma 7 adapter)
-  transform.ts             # data transform + rule-based sentiment helpers
-  server/
-    auth.ts                # cookie session helpers
-    password.ts            # password hash/verify
-    analysis-response.ts   # DB -> UI response mapping
-    date-filter.ts         # date range parsing/bounds
+  api.ts                       # frontend analysis orchestration
+  server/analysis-response.ts  # DB -> UI mapping (incl. languageTag, clusterId)
 prisma/
   schema.prisma
-  migrations/
 ```
 
 ## Prerequisites
 
-- Node.js 18+ (recommended latest LTS)
-- pnpm (recommended)
-- PostgreSQL running locally or remotely
+- Node.js 18+
+- pnpm
+- Python 3.10+
+- PostgreSQL
 
 ## Environment Variables
 
-Create/update `.env`:
+Create/update `.env` in project root:
 
 ```env
 DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/ai_sentiment_db"
 AUTH_SECRET="replace-with-a-long-random-secret"
 
-# Optional: required for live scraping
+# Optional for live scraping
 BRIGHTDATA_API_KEY="your-brightdata-api-key"
-```
 
-Notes:
-- Prisma CLI reads `DATABASE_URL` from `.env` via `prisma.config.ts`.
-- `AUTH_SECRET` is required for secure production sessions.
-- If `BRIGHTDATA_API_KEY` is missing, use Demo mode.
+# Optional for AI recommendation enhancement
+GEMINI_API_KEY="your-gemini-api-key"
+GEMINI_MODEL="gemini-1.5-pro"
+```
 
 ## Installation
 
 ```bash
 pnpm install
+pip install -r api/requirements.txt
 ```
 
 ## Database Setup
-
-Run migrations:
 
 ```bash
 npx prisma migrate dev --name init_schema
 npx prisma generate
 ```
 
-Verify:
-
-```bash
-npx prisma migrate status
-```
-
-## Run the App
+## Run (Web + ML Together)
 
 ```bash
 pnpm dev
 ```
 
-Open: `http://localhost:3000`
+This starts:
+- Next.js at `http://localhost:3000`
+- FastAPI ML server at `http://localhost:8000`
 
-## First End-to-End Test
+## Run Separately
 
-1. Register a new account on login page.
-2. Sign in.
-3. Go to Dashboard Home.
-4. Run `Demo Analysis` first.
-5. Open:
-   - Sentiment
-   - Products
-   - Recommendations
-   - History
-6. Change date range in header (`7d`, `30d`, `90d`, `custom`) and verify charts/tables update.
-7. Open a run from History and confirm the selected run loads.
+```bash
+pnpm run dev:web
+pnpm run dev:ml
+```
 
 ## API Endpoints
 
-### Auth
+Auth:
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 
-### Analysis
-- `POST /api/analysis`  
-  Persist analysis output for current user.
+Analysis:
+- `POST /api/analysis`
 - `GET /api/analysis/latest?range=30d&from=YYYY-MM-DD&to=YYYY-MM-DD`
 - `GET /api/analysis/[runId]?range=30d&from=YYYY-MM-DD&to=YYYY-MM-DD`
 - `GET /api/analysis/history?limit=20`
 
-### Scraping (Bright Data)
+Scraping:
 - `POST /api/scrape/trigger`
 - `GET /api/scrape/progress/[snapshotId]`
 - `GET /api/scrape/results/[snapshotId]`
 - `GET /api/config/brightdata`
 
-## Date Filter Behavior
+AI integration routes (Next.js server routes):
+- `POST /api/sentiment/predict/batch`
+- `POST /api/clustering/predict/batch`
+- `POST /api/ai/recommendations`
 
-Global date range in header drives dashboard data:
-- `7d`: from today-6 days to today
-- `30d`: from today-29 days to today
-- `90d`: from today-89 days to today
-- `custom`: uses `from` and `to` date inputs
+## Notes
 
-Applied to:
-- comments list
-- sentiment overview/charts
-- product metrics/trends
-- recommendations
-
-## Authentication & Data Isolation
-
-- Session stored in secure HttpOnly cookie (`ss_session`)
-- Passwords hashed with Node `scrypt`
-- Analysis and history APIs are user-scoped
-- Users only see their own runs
-
-## Integrating External Sentiment Model + Gemini Clustering
-
-Current sentiment pipeline is rule-based in `lib/transform.ts`.
-
-To replace with your friend’s model:
-1. Add server-side inference client (API call preferred).
-2. Replace sentiment assignment in analysis flow.
-3. Persist model version and confidence per comment.
-4. Add Gemini clustering step after sentiment.
-5. Store clusters and surface in Recommendations/History.
-
-Recommended env additions:
-
-```env
-SENTIMENT_API_URL="https://your-model-service/predict"
-SENTIMENT_API_KEY="optional"
-GEMINI_API_KEY="your-gemini-key"
-GEMINI_MODEL="gemini-1.5-pro"
-```
-
-## Troubleshooting
-
-- `P1001 Can't reach database server`:
-  - check PostgreSQL is running
-  - verify `.env` host/port/db is correct
-  - ensure Prisma uses the same DB you open in pgAdmin
-- Empty tables in pgAdmin:
-  - run migrations
-  - refresh `Schemas > public > Tables`
-- `Unauthorized` from analysis APIs:
-  - login again
-  - verify `/api/auth/me` returns user
-
-## Useful Commands
-
-```bash
-npx prisma validate
-npx prisma migrate status
-npx prisma studio
-npx tsc --noEmit
-```
-
-## Current Notes
-
-- Google OAuth button is placeholder (disabled)
-- Demo mode still useful for local testing without Bright Data key
-- History page shows stored runs and allows opening completed runs
-
+- If ML API is unavailable, sentiment falls back to local rule-based logic.
+- If clustering is unavailable, analysis continues without `clusterId`.
+- If Gemini is unavailable, recommendation generation falls back to local logic.

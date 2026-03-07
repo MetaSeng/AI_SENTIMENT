@@ -9,6 +9,8 @@ export interface Comment {
   date: string
   author: string
   likes: number
+  languageTag?: string
+  clusterId?: number
 }
 
 export interface Product {

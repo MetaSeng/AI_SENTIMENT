@@ -142,6 +142,10 @@ export async function POST(request: Request) {
           normalizedDate: toDateOrNull(c.date),
           normalizedAuthor: c.author,
           normalizedLikes: c.likes,
+          cleaningMeta: {
+            languageTag: c.languageTag ?? null,
+            clusterId: typeof c.clusterId === "number" ? c.clusterId : null,
+          },
           sentiment: c.sentiment,
           sentimentScore: c.sentimentScore,
         },

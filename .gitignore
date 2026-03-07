@@ -9,3 +9,13 @@ node_modules/
 .env*.local
 .DS_Store
 /lib/generated/prisma
+
+# Python cache/build artifacts
+**/__pycache__/
+*.py[cod]
+
+# Local model artifacts (too large for normal Git push)
+*.pth
+*.safetensors
+*.pkl
+models--*/

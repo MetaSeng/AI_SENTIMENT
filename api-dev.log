@@ -1,0 +1,41 @@
+INFO:     Started server process [31624]
+INFO:     Waiting for application startup.
+2026-03-08 14:17:58,003  INFO      api.app  \U0001f680 Loading ML models…
+2026-03-08 14:17:58,003  INFO      api.services.sentiment_service  Loading XLM-RoBERTa sentiment modelâ€¦
+Loading weights:   0%|          | 0/197 [00:00<?, ?it/s]Loading weights: 100%|##########| 197/197 [00:00<00:00, 3896.31it/s]
+[1mXLMRobertaForSequenceClassification LOAD REPORT[0m from: C:\Users\ASUS Zenbook\Downloads\AI_SENTIMENT\api\services\..\..\Setiment-analysis\xlm-roberta-base
+Key                         | Status     | 
+----------------------------+------------+-
+lm_head.layer_norm.weight   | UNEXPECTED | 
+lm_head.layer_norm.bias     | UNEXPECTED | 
+roberta.pooler.dense.weight | UNEXPECTED | 
+lm_head.dense.bias          | UNEXPECTED | 
+roberta.pooler.dense.bias   | UNEXPECTED | 
+lm_head.bias                | UNEXPECTED | 
+lm_head.dense.weight        | UNEXPECTED | 
+classifier.out_proj.bias    | MISSING    | 
+classifier.dense.bias       | MISSING    | 
+classifier.out_proj.weight  | MISSING    | 
+classifier.dense.weight     | MISSING    | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+- MISSING[3m	:those params were newly initialized because missing from the checkpoint. Consider training on your downstream task.[0m
+2026-03-08 14:18:04,932  INFO      api.services.sentiment_service  Fine-tuned XLM-RoBERTa weights loaded.
+2026-03-08 14:18:04,939  INFO      api.services.sentiment_service  Loading CharCNN-BiLSTM language taggerâ€¦
+2026-03-08 14:18:04,963  INFO      api.services.sentiment_service  CharCNN-BiLSTM loaded.
+2026-03-08 14:18:04,963  INFO      api.services.clustering_service  Loading Sentence Transformer for clustering…
+2026-03-08 14:18:04,966  INFO      sentence_transformers.SentenceTransformer  Use pytorch device_name: cpu
+2026-03-08 14:18:04,966  INFO      sentence_transformers.SentenceTransformer  Load pretrained SentenceTransformer: C:\Users\ASUS Zenbook\Downloads\AI_SENTIMENT\api\services\..\..\Comment-clustering\models\sentence_transformer_local
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|##########| 199/199 [00:00<00:00, 2737.64it/s]
+2026-03-08 14:18:08,473  INFO      api.services.clustering_service  Loaded local Sentence Transformer.
+2026-03-08 14:18:08,473  INFO      api.services.clustering_service  Loading KMeans model…
+2026-03-08 14:18:09,183  INFO      api.services.clustering_service  KMeans loaded. Number of clusters: 2
+2026-03-08 14:18:09,183  INFO      api.app  \u2705 All models ready. API is accepting requests.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+forrtl: error (200): program aborting due to window-CLOSE event
+Image              PC                Routine            Line        Source             
+KERNELBASE.dll     00007FFD7AACC1BD  Unknown               Unknown  Unknown
+KERNEL32.dll       00007FFD7C74E8D7  Unknown               Unknown  Unknown
+ntdll.dll          00007FFD7D4AC53C  Unknown               Unknown  Unknown

@@ -2,6 +2,10 @@
 
 SocialSight is a full-stack dashboard for scraping Facebook comments, running sentiment analysis + clustering, and showing product insights, recommendations, and history.
 
+## Documentation
+
+- Full technical architecture and workflow: [TECHNICAL_DOCUMENTATION.md](./TECHNICAL_DOCUMENTATION.md)
+
 ## Tech Stack
 
 - Next.js (App Router) + React + TypeScript

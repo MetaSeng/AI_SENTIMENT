@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -k -n NEXT,ML -c cyan,magenta \"next dev\" \"python -m uvicorn api.app:app --reload --host 0.0.0.0 --port 8000\"",
-    "dev:web": "next dev",
+    "dev": "concurrently -k -n NEXT,ML -c cyan,magenta \"next dev --webpack\" \"python -m uvicorn api.app:app --reload --host 0.0.0.0 --port 8000\"",
+    "dev:web": "next dev --webpack",
     "dev:ml": "python -m uvicorn api.app:app --reload --host 0.0.0.0 --port 8000",
     "build": "next build",
     "start": "next start",

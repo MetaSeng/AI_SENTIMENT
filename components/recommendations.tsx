@@ -99,17 +99,31 @@ export function Recommendations() {
   const { demoMode, dateRangePreset, customDateFrom, customDateTo } = useApp();
   const [data, setData] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const recs = await getRecommendations(demoMode, {
-        preset: dateRangePreset,
-        from: customDateFrom,
-        to: customDateTo,
-      });
-      setData(recs);
-      setLoading(false);
+      setLoadError(null);
+      try {
+        const recs = await getRecommendations(demoMode, {
+          preset: dateRangePreset,
+          from: customDateFrom,
+          to: customDateTo,
+        });
+        setData(recs);
+      } catch (error) {
+        console.error("Failed to load recommendations:", error);
+        setLoadError("Could not load recommendations. Please try again.");
+        setData({
+          topProducts: [],
+          needsImprovement: [],
+          insights: [],
+          trendingTopics: [],
+        });
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, [demoMode, dateRangePreset, customDateFrom, customDateTo]);
@@ -129,6 +143,12 @@ export function Recommendations() {
 
   return (
     <div className="flex flex-col gap-6">
+      {loadError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {loadError}
+        </div>
+      )}
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-foreground">
           Recommendations

@@ -52,8 +52,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     async function bootstrapAuth() {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 8000)
       try {
-        const res = await fetch("/api/auth/me", { cache: "no-store" })
+        const res = await fetch("/api/auth/me", {
+          cache: "no-store",
+          signal: controller.signal,
+        })
         if (!res.ok) {
           setUser(null)
           setView("login")
@@ -66,6 +71,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setUser(null)
         setView("login")
       } finally {
+        clearTimeout(timeoutId)
         setIsAuthLoading(false)
       }
     }

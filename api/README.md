@@ -48,6 +48,41 @@ Comment-clustering/
 pip install -r api/requirements.txt
 ```
 
+### 1.1 Optional: Cloud artifact download for deployment
+
+If model files are not committed to git, the API can download missing files on startup.
+
+Option A (recommended): set one base URL that mirrors your repo artifact paths:
+
+```env
+MODEL_ARTIFACT_BASE_URL=https://your-storage.example.com/artifacts
+```
+
+Then host files using paths like:
+- `Setiment-analysis/best_xlmr_sentiment_model.pth`
+- `Setiment-analysis/khmer_cs_char_cnn_model.pth`
+- `Setiment-analysis/vocab2.pkl`
+- `Setiment-analysis/xlm-roberta-base/model.safetensors`
+- `Comment-clustering/kmeans_clustering_model.pkl`
+- `Comment-clustering/models/sentence_transformer_local/model.safetensors`
+
+Option B: set per-file URLs (overrides base URL):
+
+```env
+ARTIFACT_URL_BEST_XLMR_MODEL=...
+ARTIFACT_URL_CHARCNN_MODEL=...
+ARTIFACT_URL_VOCAB=...
+ARTIFACT_URL_XLMR_MODEL_SAFETENSORS=...
+ARTIFACT_URL_CLUSTERING_KMEANS=...
+ARTIFACT_URL_CLUSTERING_MODEL_SAFETENSORS=...
+```
+
+Optional:
+
+```env
+ARTIFACT_DOWNLOAD_TIMEOUT_SECONDS=1800
+```
+
 ### 2. Start the server
 
 Run this from the **project root** (the folder that contains `api/`, `Setiment-analysis/`, `Comment-clustering/`):

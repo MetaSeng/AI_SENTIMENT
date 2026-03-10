@@ -16,6 +16,7 @@ from typing import List, Dict
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from api.services.artifact_loader import ensure_artifact
 
 try:
     import khmernltk  # type: ignore
@@ -42,9 +43,46 @@ LOCAL_XLMR_PATH = os.getenv(
     os.path.join(_BASE, "xlm-roberta-base"),
 )
 REQUIRED_ARTIFACTS = {
-    "best_xlmr_sentiment_model.pth": XLMR_MODEL_PATH,
-    "khmer_cs_char_cnn_model.pth": CS_MODEL_PATH,
-    "vocab2.pkl": VOCAB_PATH,
+    "best_xlmr_sentiment_model.pth": {
+        "path": XLMR_MODEL_PATH,
+        "relative": "Setiment-analysis/best_xlmr_sentiment_model.pth",
+        "env": "ARTIFACT_URL_BEST_XLMR_MODEL",
+    },
+    "khmer_cs_char_cnn_model.pth": {
+        "path": CS_MODEL_PATH,
+        "relative": "Setiment-analysis/khmer_cs_char_cnn_model.pth",
+        "env": "ARTIFACT_URL_CHARCNN_MODEL",
+    },
+    "vocab2.pkl": {
+        "path": VOCAB_PATH,
+        "relative": "Setiment-analysis/vocab2.pkl",
+        "env": "ARTIFACT_URL_VOCAB",
+    },
+    "xlm-roberta-base/model.safetensors": {
+        "path": os.path.join(LOCAL_XLMR_PATH, "model.safetensors"),
+        "relative": "Setiment-analysis/xlm-roberta-base/model.safetensors",
+        "env": "ARTIFACT_URL_XLMR_MODEL_SAFETENSORS",
+    },
+    "xlm-roberta-base/tokenizer.json": {
+        "path": os.path.join(LOCAL_XLMR_PATH, "tokenizer.json"),
+        "relative": "Setiment-analysis/xlm-roberta-base/tokenizer.json",
+        "env": "ARTIFACT_URL_XLMR_TOKENIZER_JSON",
+    },
+    "xlm-roberta-base/sentencepiece.bpe.model": {
+        "path": os.path.join(LOCAL_XLMR_PATH, "sentencepiece.bpe.model"),
+        "relative": "Setiment-analysis/xlm-roberta-base/sentencepiece.bpe.model",
+        "env": "ARTIFACT_URL_XLMR_SENTENCEPIECE",
+    },
+    "xlm-roberta-base/config.json": {
+        "path": os.path.join(LOCAL_XLMR_PATH, "config.json"),
+        "relative": "Setiment-analysis/xlm-roberta-base/config.json",
+        "env": "ARTIFACT_URL_XLMR_CONFIG",
+    },
+    "xlm-roberta-base/tokenizer_config.json": {
+        "path": os.path.join(LOCAL_XLMR_PATH, "tokenizer_config.json"),
+        "relative": "Setiment-analysis/xlm-roberta-base/tokenizer_config.json",
+        "env": "ARTIFACT_URL_XLMR_TOKENIZER_CONFIG",
+    },
 }
 
 
@@ -93,16 +131,28 @@ class SentimentService:
         self.sentiment_model_source = "uninitialized"
 
     def _ensure_required_artifacts(self):
+        # Attempt to download missing artifacts before failing startup.
+        for name, item in REQUIRED_ARTIFACTS.items():
+            path = item["path"]
+            if os.path.exists(path):
+                continue
+            ensure_artifact(
+                local_path=path,
+                relative_path=item["relative"],
+                env_key=item.get("env"),
+            )
+
         missing = [
-            f"{name} -> {path}"
-            for name, path in REQUIRED_ARTIFACTS.items()
-            if not os.path.exists(path)
+            f"{name} -> {item['path']}"
+            for name, item in REQUIRED_ARTIFACTS.items()
+            if not os.path.exists(item["path"])
         ]
         if missing:
             joined = "; ".join(missing)
             raise RuntimeError(
                 "Missing required fine-tuned sentiment artifacts. "
-                f"Expected files: {joined}"
+                "Provide per-file artifact URLs or MODEL_ARTIFACT_BASE_URL. "
+                f"Missing files: {joined}"
             )
 
     def load(self):

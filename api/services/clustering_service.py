@@ -16,6 +16,7 @@ import joblib
 import numpy as np
 import emoji
 from sentence_transformers import SentenceTransformer
+from api.services.artifact_loader import ensure_artifact
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,54 @@ logger = logging.getLogger(__name__)
 _BASE          = os.path.join(os.path.dirname(__file__), "..", "..", "Comment-clustering")
 KMEANS_PATH    = os.path.join(_BASE, "kmeans_clustering_model.pkl")
 TRANSFORMER_PATH = os.path.join(_BASE, "models", "sentence_transformer_local")
+
+REQUIRED_CLUSTER_ARTIFACTS = {
+    "kmeans_clustering_model.pkl": {
+        "path": KMEANS_PATH,
+        "relative": "Comment-clustering/kmeans_clustering_model.pkl",
+        "env": "ARTIFACT_URL_CLUSTERING_KMEANS",
+    },
+    "sentence_transformer_local/model.safetensors": {
+        "path": os.path.join(TRANSFORMER_PATH, "model.safetensors"),
+        "relative": "Comment-clustering/models/sentence_transformer_local/model.safetensors",
+        "env": "ARTIFACT_URL_CLUSTERING_MODEL_SAFETENSORS",
+    },
+    "sentence_transformer_local/tokenizer.json": {
+        "path": os.path.join(TRANSFORMER_PATH, "tokenizer.json"),
+        "relative": "Comment-clustering/models/sentence_transformer_local/tokenizer.json",
+        "env": "ARTIFACT_URL_CLUSTERING_TOKENIZER_JSON",
+    },
+    "sentence_transformer_local/tokenizer_config.json": {
+        "path": os.path.join(TRANSFORMER_PATH, "tokenizer_config.json"),
+        "relative": "Comment-clustering/models/sentence_transformer_local/tokenizer_config.json",
+        "env": "ARTIFACT_URL_CLUSTERING_TOKENIZER_CONFIG",
+    },
+    "sentence_transformer_local/config.json": {
+        "path": os.path.join(TRANSFORMER_PATH, "config.json"),
+        "relative": "Comment-clustering/models/sentence_transformer_local/config.json",
+        "env": "ARTIFACT_URL_CLUSTERING_CONFIG",
+    },
+    "sentence_transformer_local/modules.json": {
+        "path": os.path.join(TRANSFORMER_PATH, "modules.json"),
+        "relative": "Comment-clustering/models/sentence_transformer_local/modules.json",
+        "env": "ARTIFACT_URL_CLUSTERING_MODULES",
+    },
+    "sentence_transformer_local/config_sentence_transformers.json": {
+        "path": os.path.join(TRANSFORMER_PATH, "config_sentence_transformers.json"),
+        "relative": "Comment-clustering/models/sentence_transformer_local/config_sentence_transformers.json",
+        "env": "ARTIFACT_URL_CLUSTERING_CONFIG_ST",
+    },
+    "sentence_transformer_local/sentence_bert_config.json": {
+        "path": os.path.join(TRANSFORMER_PATH, "sentence_bert_config.json"),
+        "relative": "Comment-clustering/models/sentence_transformer_local/sentence_bert_config.json",
+        "env": "ARTIFACT_URL_CLUSTERING_SBERT_CONFIG",
+    },
+    "sentence_transformer_local/1_Pooling/config.json": {
+        "path": os.path.join(TRANSFORMER_PATH, "1_Pooling", "config.json"),
+        "relative": "Comment-clustering/models/sentence_transformer_local/1_Pooling/config.json",
+        "env": "ARTIFACT_URL_CLUSTERING_POOLING_CONFIG",
+    },
+}
 
 # Emoji → sentiment token map (must match training preprocessing)
 EMOJI_SENTIMENT_MAP = {
@@ -62,6 +111,15 @@ class ClusteringService:
 
     def load(self):
         """Load encoder + KMeans. Call this once at app startup."""
+        for item in REQUIRED_CLUSTER_ARTIFACTS.values():
+            if os.path.exists(item["path"]):
+                continue
+            ensure_artifact(
+                local_path=item["path"],
+                relative_path=item["relative"],
+                env_key=item.get("env"),
+            )
+
         logger.info("Loading Sentence Transformer for clustering…")
         if os.path.exists(TRANSFORMER_PATH):
             self.encoder = SentenceTransformer(TRANSFORMER_PATH)

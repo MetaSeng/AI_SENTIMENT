@@ -25,6 +25,8 @@ import type {
   Sentiment,
   AnalysisHistoryItem,
   DateFilterOptions,
+  ModelMonitorLatestResponse,
+  ModelMonitorHistoryResponse,
 } from "./types";
 
 // ─── In-memory store for the latest analysis results ────────────────
@@ -248,6 +250,35 @@ export async function getAnalysisHistory(): Promise<AnalysisHistoryItem[]> {
     return Array.isArray(data?.runs) ? (data.runs as AnalysisHistoryItem[]) : [];
   } catch {
     return [];
+  }
+}
+
+export async function getModelMonitorLatest(
+  filter?: DateFilterOptions,
+): Promise<ModelMonitorLatestResponse | null> {
+  try {
+    const res = await fetch(`/api/models/sentiment/metrics/latest${buildFilterQuery(filter)}`, {
+      cache: "no-store",
+    })
+    if (!res.ok) return null
+    return (await res.json()) as ModelMonitorLatestResponse
+  } catch {
+    return null
+  }
+}
+
+export async function getModelMonitorHistory(
+  limit = 20,
+): Promise<ModelMonitorHistoryResponse | null> {
+  try {
+    const qs = new URLSearchParams({ limit: String(limit) })
+    const res = await fetch(`/api/models/sentiment/metrics/history?${qs.toString()}`, {
+      cache: "no-store",
+    })
+    if (!res.ok) return null
+    return (await res.json()) as ModelMonitorHistoryResponse
+  } catch {
+    return null
   }
 }
 
@@ -494,6 +525,7 @@ async function applyAiSentiment(comments: Comment[]): Promise<Comment[]> {
         parseFiniteNumber(result.scores?.positive) ??
         parseFiniteNumber(result.scores?.Positive) ??
         parseFiniteNumber(result.scores?.POSITIVE);
+      const confidence = parseFiniteNumber(result.confidence);
 
       const languageTag =
         typeof result.language_tag === "string"
@@ -513,6 +545,8 @@ async function applyAiSentiment(comments: Comment[]): Promise<Comment[]> {
         sentiment,
         sentimentScore: Math.round(nextScore * 100) / 100,
         languageTag,
+        sentimentConfidence:
+          confidence !== null ? Math.max(0, Math.min(1, confidence)) : next.sentimentConfidence,
       };
     }
   }

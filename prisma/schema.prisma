@@ -96,6 +96,7 @@ model Project {
   products      Product[]
   runs          AnalysisRun[]
   integrations  Integration[]
+  evaluations   ModelEvaluation[]
 }
 
 model Integration {
@@ -313,4 +314,26 @@ model RecommendationItem {
   product      Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([runId, kind])
+}
+
+model ModelEvaluation {
+  id               String   @id @default(cuid())
+  projectId        String
+  modelName        String
+  modelVersion     String?
+  datasetName      String?
+  sampleSize       Int      @default(0)
+  accuracy         Decimal? @db.Decimal(5, 4)
+  precisionMacro   Decimal? @db.Decimal(5, 4)
+  recallMacro      Decimal? @db.Decimal(5, 4)
+  f1Macro          Decimal? @db.Decimal(5, 4)
+  metrics          Json?
+  confusionMatrix  Json?
+  notes            String?  @db.Text
+  evaluatedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, evaluatedAt])
 }

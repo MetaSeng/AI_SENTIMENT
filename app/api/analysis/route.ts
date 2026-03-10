@@ -145,6 +145,10 @@ export async function POST(request: Request) {
           cleaningMeta: {
             languageTag: c.languageTag ?? null,
             clusterId: typeof c.clusterId === "number" ? c.clusterId : null,
+            sentimentConfidence:
+              typeof c.sentimentConfidence === "number" && Number.isFinite(c.sentimentConfidence)
+                ? c.sentimentConfidence
+                : null,
           },
           sentiment: c.sentiment,
           sentimentScore: c.sentimentScore,

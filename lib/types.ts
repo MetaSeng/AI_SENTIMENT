@@ -11,6 +11,7 @@ export interface Comment {
   likes: number
   languageTag?: string
   clusterId?: number
+  sentimentConfidence?: number
 }
 
 export interface Product {
@@ -92,6 +93,7 @@ export type DashboardTab =
   | "sentiment"
   | "products"
   | "recommendations"
+  | "modelMonitor"
   | "history"
   | "settings"
 
@@ -111,4 +113,44 @@ export interface AnalysisHistoryItem {
     positivePercent: number
     negativePercent: number
   }[]
+}
+
+export interface ModelEvaluationRecord {
+  id: string
+  modelName: string
+  modelVersion: string | null
+  datasetName: string | null
+  sampleSize: number
+  accuracy: number | null
+  precisionMacro: number | null
+  recallMacro: number | null
+  f1Macro: number | null
+  evaluatedAt: string
+}
+
+export interface SentimentProxyMetrics {
+  totalPredictions: number
+  avgPositiveScore: number | null
+  avgConfidence: number | null
+  labelDistribution: {
+    positive: number
+    neutral: number
+    negative: number
+  }
+}
+
+export interface ModelMonitorLatestResponse {
+  latestEvaluation: ModelEvaluationRecord | null
+  proxy: SentimentProxyMetrics
+}
+
+export interface ModelMonitorHistoryResponse {
+  evaluations: ModelEvaluationRecord[]
+  proxyTrend: Array<{
+    runId: string
+    createdAt: string
+    avgConfidence: number | null
+    avgPositiveScore: number | null
+    totalComments: number
+  }>
 }

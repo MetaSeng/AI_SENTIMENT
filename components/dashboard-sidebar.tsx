@@ -5,6 +5,7 @@ import {
   Home,
   Lightbulb,
   History,
+  Activity,
   Moon,
   Package,
   Settings,
@@ -22,6 +23,7 @@ const navItems: { id: DashboardTab; label: string; icon: typeof Home }[] = [
   { id: "sentiment", label: "Sentiment Analysis", icon: BarChart3 },
   { id: "products", label: "Product Performance", icon: Package },
   { id: "recommendations", label: "Recommendations", icon: Lightbulb },
+  { id: "modelMonitor", label: "Model Monitor", icon: Activity },
   { id: "history", label: "History", icon: History },
   { id: "settings", label: "Settings", icon: Settings },
 ]

@@ -24,7 +24,11 @@ export function buildAnalysisResponse(
       const commentDate = c.normalizedDate ?? c.createdAt
       const meta =
         c.cleaningMeta && typeof c.cleaningMeta === "object"
-          ? (c.cleaningMeta as { languageTag?: unknown; clusterId?: unknown })
+          ? (c.cleaningMeta as {
+              languageTag?: unknown
+              clusterId?: unknown
+              sentimentConfidence?: unknown
+            })
           : {}
       return {
         id: c.id,
@@ -40,6 +44,11 @@ export function buildAnalysisResponse(
         clusterId:
           typeof meta.clusterId === "number" && Number.isFinite(meta.clusterId)
             ? Math.floor(meta.clusterId)
+            : undefined,
+        sentimentConfidence:
+          typeof meta.sentimentConfidence === "number" &&
+          Number.isFinite(meta.sentimentConfidence)
+            ? meta.sentimentConfidence
             : undefined,
       }
     })

@@ -238,7 +238,7 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "UserSetting_userId_key" ON "UserSetting"("userId");
-.
+
 -- CreateIndex
 CREATE INDEX "Product_projectId_idx" ON "Product"("projectId");
 

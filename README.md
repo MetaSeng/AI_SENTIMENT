@@ -23,6 +23,7 @@ SocialSight is a full-stack dashboard for scraping Facebook comments, running se
 - AI sentiment via `/api/sentiment/predict/batch` with fallback to rule-based sentiment
 - AI clustering via `/api/clustering/predict/batch` (cluster id stored per comment)
 - Optional Gemini recommendations via `/api/ai/recommendations` with local fallback
+- Model Monitor dashboard tab for sentiment quality metrics (evaluation + production proxies)
 
 ## Project Structure
 
@@ -124,6 +125,9 @@ AI integration routes (Next.js server routes):
 - `POST /api/sentiment/predict/batch`
 - `POST /api/clustering/predict/batch`
 - `POST /api/ai/recommendations`
+- `GET /api/models/sentiment/metrics/latest`
+- `GET /api/models/sentiment/metrics/history`
+- `POST /api/models/sentiment/metrics` (save labeled evaluation results)
 
 ## Notes
 

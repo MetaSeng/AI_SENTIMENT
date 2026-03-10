@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import {
-  BarChart3,
   MessageSquare,
   Package,
   Lightbulb,
@@ -18,8 +17,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
   ResponsiveContainer,
 } from "recharts"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -298,40 +295,6 @@ export function SentimentAnalysis() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Engagement vs Sentiment */}
-      <Card className="border-border/60">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="h-4 w-4 text-primary" />
-            Engagement vs Sentiment
-          </CardTitle>
-          <CardDescription>
-            Compare post likes/reactions with sentiment scores
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={overview.engagementVsSentiment}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="post" tick={{ fontSize: 12 }} className="fill-muted-foreground" />
-                <YAxis tick={{ fontSize: 12 }} className="fill-muted-foreground" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Bar dataKey="likes" fill={SENTIMENT_COLORS.positive} radius={[4, 4, 0, 0]} name="Likes" />
-                <Bar dataKey="sentimentScore" fill="oklch(0.55 0.2 260)" radius={[4, 4, 0, 0]} name="Sentiment %" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Comments Table */}
       <Card className="border-border/60">

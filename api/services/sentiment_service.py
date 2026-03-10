@@ -15,7 +15,7 @@ from typing import List, Dict
 
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoConfig, AutoTokenizer, AutoModelForSequenceClassification
 from api.services.artifact_loader import ensure_artifact
 
 try:
@@ -57,11 +57,6 @@ REQUIRED_ARTIFACTS = {
         "path": VOCAB_PATH,
         "relative": "Setiment-analysis/vocab2.pkl",
         "env": "ARTIFACT_URL_VOCAB",
-    },
-    "xlm-roberta-base/model.safetensors": {
-        "path": os.path.join(LOCAL_XLMR_PATH, "model.safetensors"),
-        "relative": "Setiment-analysis/xlm-roberta-base/model.safetensors",
-        "env": "ARTIFACT_URL_XLMR_MODEL_SAFETENSORS",
     },
     "xlm-roberta-base/tokenizer.json": {
         "path": os.path.join(LOCAL_XLMR_PATH, "tokenizer.json"),
@@ -159,30 +154,40 @@ class SentimentService:
         """Load all models into memory. Call this once at app startup."""
         self._ensure_required_artifacts()
         logger.info("Loading XLM-RoBERTa sentiment modelâ€¦")
-        base_model_source = (
-            LOCAL_XLMR_PATH if os.path.isdir(LOCAL_XLMR_PATH) else BASE_MODEL_ID
-        )
+        base_model_source = LOCAL_XLMR_PATH if os.path.isdir(LOCAL_XLMR_PATH) else BASE_MODEL_ID
         try:
-            # Local-only load prevents startup dependency on internet access.
+            # Load tokenizer + config only (small files), then load the fine-tuned
+            # checkpoint weights directly to reduce startup memory.
             self.tokenizer = AutoTokenizer.from_pretrained(
                 base_model_source,
                 local_files_only=True,
             )
-            self.xlmr_model = AutoModelForSequenceClassification.from_pretrained(
+            config = AutoConfig.from_pretrained(
                 base_model_source,
-                num_labels=3,
                 local_files_only=True,
             )
+            config.num_labels = 3
+            self.xlmr_model = AutoModelForSequenceClassification.from_config(config)
         except Exception as exc:
             raise RuntimeError(
-                "Unable to load base model/tokenizer in offline mode. "
-                "Provide local XLM-RoBERTa files in "
-                f"'{LOCAL_XLMR_PATH}' or pre-cache '{BASE_MODEL_ID}'. "
+                "Unable to load tokenizer/config in offline mode. "
+                "Provide local XLM-RoBERTa tokenizer/config files in "
+                f"'{LOCAL_XLMR_PATH}'. "
                 f"Root cause: {exc}"
             ) from exc
-        self.xlmr_model.load_state_dict(
-            torch.load(XLMR_MODEL_PATH, map_location=DEVICE)
-        )
+        state_dict = torch.load(XLMR_MODEL_PATH, map_location=DEVICE)
+        try:
+            self.xlmr_model.load_state_dict(state_dict)
+        except RuntimeError:
+            # Common fallback for wrapped checkpoints.
+            if isinstance(state_dict, dict) and "state_dict" in state_dict:
+                self.xlmr_model.load_state_dict(state_dict["state_dict"])
+            else:
+                remapped = {
+                    (k[7:] if k.startswith("module.") else k): v
+                    for k, v in state_dict.items()
+                }
+                self.xlmr_model.load_state_dict(remapped)
         logger.info("Fine-tuned XLM-RoBERTa weights loaded.")
         self.sentiment_weights_loaded = True
         self.sentiment_model_source = "fine_tuned"

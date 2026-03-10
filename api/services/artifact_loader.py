@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from urllib import request
@@ -57,7 +58,13 @@ def ensure_artifact(
     logger.info("Downloading artifact: %s", relative_path)
     logger.info("Source URL: %s", url)
 
-    tmp_fd, tmp_name = tempfile.mkstemp(prefix="artifact_", suffix=".tmp")
+    # Create temp file in the same directory as target to avoid cross-device
+    # rename errors on platforms where /tmp and project dir are different mounts.
+    tmp_fd, tmp_name = tempfile.mkstemp(
+        prefix="artifact_",
+        suffix=".tmp",
+        dir=str(target.parent),
+    )
     os.close(tmp_fd)
 
     try:
@@ -68,7 +75,15 @@ def ensure_artifact(
                     break
                 out.write(chunk)
 
-        os.replace(tmp_name, target)
+        try:
+            os.replace(tmp_name, target)
+        except OSError as exc:
+            # Fallback to copy when atomic rename is not possible across devices.
+            if getattr(exc, "errno", None) == 18:
+                shutil.copyfile(tmp_name, target)
+                os.remove(tmp_name)
+            else:
+                raise
         logger.info("Artifact ready: %s", target)
         return True
     except Exception as exc:
